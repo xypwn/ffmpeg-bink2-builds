@@ -1,6 +1,7 @@
 on:
   release:
     types: [created]
+  workflow_dispatch:
 
 permissions:
     contents: write
@@ -10,6 +11,9 @@ jobs:
   release-windows:
     name: Release Windows Binaries
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -17,25 +21,33 @@ jobs:
       uses: msys2/setup-msys2@v2
       with:
         msystem: mingw64
-        install: curl git gcc make diffutils yasm mingw-w64-x86_64-libx264
-    - name: Clone ffmpeg, checkout compatible version and apply patches
-      shell: msys2 {0}
+        path-type: strict
+        install: git mingw-w64-x86_64-gcc make mingw-w64-x86_64-pkgconf diffutils yasm mingw-w64-x86_64-libx264
+    - name: Toolchain info
       run: |
-        git clone https://git.ffmpeg.org/ffmpeg.git
-        cd ffmpeg
-        # Checkout compatible version
-        git checkout e9107d16f3ea1eff48f0bfdcaff49f7c32a20919
-        # Fix assembler issue
-        git cherry-pick effadce6c756247ea8bae32dc13bb3e6f464f0eb
-        # Add bink2 decoder
-        git apply ../bink2.patch
-        # IDK how exactly this issue happened, but the patch fixes it
-        git apply ../fix-hwcontext_vulkan.patch
+        echo "MSYSTEM = $MSYSTEM"
+        echo "gcc = $(which gcc)"
+        echo "pkg-config = $(which pkg-config)"
+        echo "libx264 pkg-config flags = $(pkg-config --cflags --libs x264)"
+    - name: Clone ffmpeg
+      run: git clone https://git.ffmpeg.org/ffmpeg.git
+    - name: "ffmpeg: Checkout compatible version"
+      run: git checkout e9107d16f3ea1eff48f0bfdcaff49f7c32a20919
+      working-directory: ffmpeg
+    - name: "ffmpeg: Apply assembler fix"
+      run: git cherry-pick --no-commit effadce6c756247ea8bae32dc13bb3e6f464f0eb
+      working-directory: ffmpeg
+    - name: "ffmpeg: Apply bink2 decoder patch"
+      run: git apply ../bink2.patch
+      working-directory: ffmpeg
+    - name: "ffmpeg: Fix some vulkan error (IDK how exactly this issue happened or what it means, but the fix works)"
+      run: git apply ../fix-hwcontext_vulkan.patch
+      working-directory: ffmpeg
     - name: Build ffmpeg
-      shell: msys2 {0}
       run: |
         ./configure --enable-gpl --enable-version3 --enable-libx264
         make -j8
+      working-directory: ffmpeg
     - name: Upload release files
       uses: softprops/action-gh-release@v2.2.2
       if: startsWith(github.ref, 'refs/tags/')
