@@ -1,3 +1,8 @@
 /*.mp4
 /*.bk2
+/opt
+/x264
 /ffmpeg
+/ffmpeg.exe
+/ffplay.exe
+/ffprobe.exe

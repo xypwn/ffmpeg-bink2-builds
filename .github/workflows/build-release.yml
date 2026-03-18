@@ -22,13 +22,21 @@ jobs:
       with:
         msystem: mingw64
         path-type: strict
-        install: git mingw-w64-x86_64-gcc make mingw-w64-x86_64-pkgconf diffutils yasm mingw-w64-x86_64-libx264
+        install: git mingw-w64-x86_64-gcc make mingw-w64-x86_64-pkgconf diffutils yasm nasm mingw-w64-x86_64-libx264 mingw-w64-x86_64-SDL2
     - name: Toolchain info
       run: |
         echo "MSYSTEM = $MSYSTEM"
         echo "gcc = $(which gcc)"
         echo "pkg-config = $(which pkg-config)"
         echo "libx264 pkg-config flags = $(pkg-config --cflags --libs x264)"
+    - name: Clone x264
+      run: git clone https://code.videolan.org/videolan/x264.git
+    - name: Build x264
+      run: |
+        ./configure --enable-static --disable-cli
+        make -j
+        make install DESTDIR=../opt
+      working-directory: x264
     - name: Clone ffmpeg
       run: git clone https://git.ffmpeg.org/ffmpeg.git
     - name: "ffmpeg: Checkout compatible version"
@@ -45,8 +53,22 @@ jobs:
       working-directory: ffmpeg
     - name: Build ffmpeg
       run: |
-        ./configure --enable-gpl --enable-version3 --enable-libx264
-        make -j8
+        export PKG_CONFIG_PATH="../opt/usr/local/lib/pkgconfig"
+
+        ./configure \
+          --disable-doc \
+          --disable-autodetect \
+          --disable-shared \
+          --enable-static \
+          --enable-gpl \
+          --enable-version3 \
+          --enable-libx264 \
+          --enable-sdl2 \
+          --pkg-config-flags="--static" \
+          --extra-cflags="-O2 -static -static-libgcc -I../opt/usr/local/include" \
+          --extra-cxxflags="-O2 -static -static-libgcc -static-libstdc++ -I../opt/usr/local/include" \
+          --extra-ldflags="-static -static-libgcc -static-libstdc++ -L../opt/usr/local/lib"
+        make -j
       working-directory: ffmpeg
     - name: Upload release files
       uses: softprops/action-gh-release@v2.2.2
