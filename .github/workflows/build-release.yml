@@ -1,0 +1,46 @@
+on:
+  release:
+    types: [created]
+
+permissions:
+    contents: write
+    packages: write
+
+jobs:
+  release-windows:
+    name: Release Windows Binaries
+    runs-on: windows-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup msys2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: mingw64
+        install: curl git gcc make diffutils yasm mingw-w64-x86_64-libx264
+    - name: Clone ffmpeg, checkout compatible version and apply patches
+      shell: msys2 {0}
+      run: |
+        git clone https://git.ffmpeg.org/ffmpeg.git
+        cd ffmpeg
+        # Checkout compatible version
+        git checkout e9107d16f3ea1eff48f0bfdcaff49f7c32a20919
+        # Fix assembler issue
+        git cherry-pick effadce6c756247ea8bae32dc13bb3e6f464f0eb
+        # Add bink2 decoder
+        git apply ../bink2.patch
+        # IDK how exactly this issue happened, but the patch fixes it
+        git apply ../fix-hwcontext_vulkan.patch
+    - name: Build ffmpeg
+      shell: msys2 {0}
+      run: |
+        ./configure --enable-gpl --enable-version3 --enable-libx264
+        make -j8
+    - name: Upload release files
+      uses: softprops/action-gh-release@v2.2.2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          ffmpeg/ffmpeg.exe
+          ffmpeg/ffplay.exe
+          ffmpeg/ffprobe.exe
